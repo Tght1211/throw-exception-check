@@ -45,7 +45,13 @@ public class ExceptionScanner {
     private static final List<Pattern> INCORRECT_PATTERNS = Arrays.asList(
         Pattern.compile("throw new (?!\\w*Exception\\([^)]*\\w+ErrorCode)[^(]*\\([^)]*\"[^\"]+\""),
         Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\"[^\"]*%[sdf][^\"]*\""),
-        Pattern.compile("ExceptionUtils\\.throwException\\([^,]+,\\s*\"[^\"]*%[sdf][^\"]*\"")
+        Pattern.compile("ExceptionUtils\\.throwException\\([^,]+,\\s*\"[^\"]*%[sdf][^\"]*\""),
+        // 匹配new BaseDataResponse<>("1", "字符串字面量")模式
+        Pattern.compile("new\\s+BaseDataResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)"),
+        // 匹配new BaseResponse<>("1", "字符串字面量")模式  
+        Pattern.compile("new\\s+BaseResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)"),
+        // 匹配通用的new Response<>("1", "字符串字面量")模式
+        Pattern.compile("new\\s+\\w+Response<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)")
     );
     
     private List<String> scanFiles = new ArrayList<>();
@@ -255,6 +261,24 @@ public class ExceptionScanner {
             if (formatPattern.matcher(line).find()) {
                 return true;
             }
+        }
+        
+        // 检查BaseDataResponse模式
+        Pattern baseDataResponsePattern = Pattern.compile("new\\s+BaseDataResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)");
+        if (baseDataResponsePattern.matcher(line).find()) {
+            return true;
+        }
+        
+        // 检查BaseResponse模式  
+        Pattern baseResponsePattern = Pattern.compile("new\\s+BaseResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)");
+        if (baseResponsePattern.matcher(line).find()) {
+            return true;
+        }
+        
+        // 检查通用Response模式
+        Pattern genericResponsePattern = Pattern.compile("new\\s+\\w+Response<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)");
+        if (genericResponsePattern.matcher(line).find()) {
+            return true;
         }
         
         return false;
