@@ -35,7 +35,12 @@ public class ExceptionScanner {
     
     // 正确的模式
     private static final List<Pattern> CORRECT_PATTERNS = Arrays.asList(
-        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty).*?\\w+ErrorCode\\.\\w+"),
+        // BizAssert调用只有错误码，没有额外的字符串参数
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+\\s*\\)"),
+        // BizAssert调用有错误码和getMessage()
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\\w+ErrorCode\\.\\w+\\.getMessage\\(\\)\\s*\\)"),
+        // BizAssert调用有错误码和getMessage()，带格式化
+        Pattern.compile("BizAssert\\.(isTrueWithFormat|notNullWithFormat|notBlankWithFormat|notEmptyWithFormat)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\\w+ErrorCode\\.\\w+\\.getMessage\\(\\),[^)]+\\)"),
         Pattern.compile("ExceptionUtils\\.throwException\\(\\w+ErrorCode\\.\\w+"),
         Pattern.compile("new BizException\\(new ErrorContext\\(\\w+ErrorCode\\.\\w+"),
         Pattern.compile("new \\w+Exception\\([^)]*\\w+ErrorCode\\.\\w+")
@@ -46,6 +51,8 @@ public class ExceptionScanner {
         Pattern.compile("throw new (?!\\w*Exception\\([^)]*\\w+ErrorCode)[^(]*\\([^)]*\"[^\"]+\""),
         Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\"[^\"]*%[sdf][^\"]*\""),
         Pattern.compile("ExceptionUtils\\.throwException\\([^,]+,\\s*\"[^\"]*%[sdf][^\"]*\""),
+        // 匹配有错误码但使用中文字符串字面量的情况：BizAssert.notNull(pageNumber, BizErrorCode.PAGE_NUMBER_NULL, "pageNumber必须有值")
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\".*[\\u4e00-\\u9fa5]+[^\"]*\""),
         // 匹配new BaseDataResponse<>("1", "字符串字面量")模式
         Pattern.compile("new\\s+BaseDataResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)"),
         // 匹配new BaseResponse<>("1", "字符串字面量")模式  
@@ -263,22 +270,11 @@ public class ExceptionScanner {
             }
         }
         
-        // 检查BaseDataResponse模式
-        Pattern baseDataResponsePattern = Pattern.compile("new\\s+BaseDataResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)");
-        if (baseDataResponsePattern.matcher(line).find()) {
-            return true;
-        }
-        
-        // 检查BaseResponse模式  
-        Pattern baseResponsePattern = Pattern.compile("new\\s+BaseResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)");
-        if (baseResponsePattern.matcher(line).find()) {
-            return true;
-        }
-        
-        // 检查通用Response模式
-        Pattern genericResponsePattern = Pattern.compile("new\\s+\\w+Response<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)");
-        if (genericResponsePattern.matcher(line).find()) {
-            return true;
+        // 检查INCORRECT_PATTERNS中的所有模式
+        for (Pattern pattern : INCORRECT_PATTERNS) {
+            if (pattern.matcher(line).find()) {
+                return true;
+            }
         }
         
         return false;
