@@ -58,7 +58,15 @@ public class ExceptionScanner {
         // 匹配new BaseResponse<>("1", "字符串字面量")模式  
         Pattern.compile("new\\s+BaseResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)"),
         // 匹配通用的new Response<>("1", "字符串字面量")模式
-        Pattern.compile("new\\s+\\w+Response<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)")
+        Pattern.compile("new\\s+\\w+Response<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)"),
+        // 匹配String.format在BizAssert中的使用：BizAssert.isTrue(orgByTp == null, String.format("该机构已存在,无法更新机构的tpId为%s", request.getTpId()))
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*String\\.format\\("),
+        // 匹配BizAssert中只有中文字符串字面量的情况：BizAssert.isTrue(OrgSourceType.isIncluded(request.getSource()), "非法的机构source")
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\"[\\u4e00-\\u9fa5]+[^\"]*\"\\s*\\)"),
+        // 匹配跨多行的BizAssert调用中的String.format
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]*String\\.format\\("),
+        // 匹配跨多行的BizAssert调用中的中文字符串字面量
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]*\"[\\u4e00-\\u9fa5]+[^\"]*\"[^)]*\\)")
     );
     
     private List<String> scanFiles = new ArrayList<>();
