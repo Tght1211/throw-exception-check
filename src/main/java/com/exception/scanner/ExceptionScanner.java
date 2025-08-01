@@ -30,7 +30,9 @@ public class ExceptionScanner {
         // 忽略只有变量名的简单参数验证
         Pattern.compile("BizAssert\\.(notNull|isTrue|notBlank|notEmpty)\\([^,]+,\\s*\"[a-zA-Z0-9_]+\"\\s*\\)"),
         // 忽略包含常见英文关键词的参数验证
-        Pattern.compile("BizAssert\\.(notNull|isTrue|notBlank|notEmpty)\\([^,]+,\\s*\"[a-zA-Z0-9_\\s]*(must not be null|is valid|is not valid|is invalid|must not|is null|is required|cannot be null|must not be blank|format is invalid|should not be null)[a-zA-Z0-9_\\s]*\"")
+        Pattern.compile("BizAssert\\.(notNull|isTrue|notBlank|notEmpty)\\([^,]+,\\s*\"[a-zA-Z0-9_\\s]*(must not be null|is valid|is not valid|is invalid|must not|is null|is required|cannot be null|must not be blank|format is invalid|should not be null)[a-zA-Z0-9_\\s]*\""),
+        // 忽略注解验证中的英文message：@NotNull(message = "orgId must not be null")等
+        Pattern.compile("@(NotNull|NotEmpty|NotBlank|Size|Max|Min|Valid|Pattern|Email|Range|Length|DecimalMax|DecimalMin|Digits|Future|Past|AssertTrue|AssertFalse)\\s*\\([^)]*message\\s*=\\s*\"[a-zA-Z0-9_\\s]+\"[^)]*\\)")
     );
     
     // 正确的模式
@@ -70,7 +72,11 @@ public class ExceptionScanner {
         // 匹配跨多行的BizAssert调用中的中文字符串字面量
         Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]*\"[\\u4e00-\\u9fa5]+[^\"]*\"[^)]*\\)"),
         // 匹配复杂条件表达式 + 中文字符串字面量的情况：BizAssert.isTrue(load.getSource() != OrgSourceType.DING.getValue(), "当前机构已经是钉钉机构无需操作上钉")
-        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]+,\\s*\"[\\u4e00-\\u9fa5]+[^\"]*\"\\s*\\)")
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]+,\\s*\"[\\u4e00-\\u9fa5]+[^\"]*\"\\s*\\)"),
+        // 匹配注解验证中的中文message：@NotNull(message = "机构ID不能为空"), @Size(max = 10, message = "一次最多添加10个管理员")等
+        Pattern.compile("@(NotNull|NotEmpty|NotBlank|Size|Max|Min|Valid|Pattern|Email|Range|Length|DecimalMax|DecimalMin|Digits|Future|Past|AssertTrue|AssertFalse)\\s*\\([^)]*message\\s*=\\s*\"[^\"]*[\\u4e00-\\u9fa5]+[^\"]*\""),
+        // 简化的注解中文message匹配模式
+        Pattern.compile("message\\s*=\\s*\"[^\"]*[\\u4e00-\\u9fa5]+[^\"]*\"")
     );
     
     private List<String> scanFiles = new ArrayList<>();
@@ -253,6 +259,16 @@ public class ExceptionScanner {
             }
         }
         
+        // 检查注解验证中的中文message
+        if (line.contains("@") && line.contains("message") && line.contains("\"")) {
+            // 检查注解验证的INCORRECT_PATTERNS中的模式
+            for (Pattern pattern : INCORRECT_PATTERNS) {
+                if (pattern.matcher(line).find()) {
+                    return true;
+                }
+            }
+        }
+
         // 检查BizAssert中的格式化字符串问题 - 有错误码但使用了格式化字符串却没有用format方法
         if (line.contains("BizAssert.") && line.contains("%") && line.contains("\"")) {
             Pattern formatPattern = Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\"[^\"]*%[sdf][^\"]*\"");
