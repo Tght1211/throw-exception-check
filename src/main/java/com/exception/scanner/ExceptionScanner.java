@@ -21,8 +21,8 @@ public class ExceptionScanner {
         Pattern.compile("BizAssert\\.(notNull|isTrue|notBlank|notEmpty)\\([^,]+,\\s*\"[a-zA-Z0-9_\\s]+\\s+(must not be null|is valid|is not valid|is invalid|must not|is null|is required|cannot be null|must not be blank|format is invalid)(\\s+.*)?\""),
         // 忽略纯英文字符串参数验证（只有英文字母、数字、下划线、空格）
         Pattern.compile("BizAssert\\.(notNull|isTrue|notBlank|notEmpty)\\([^,]+,\\s*\"[a-zA-Z0-9_\\s]+\"\\s*\\)"),
-        // 忽略无参数或只有参数的BizAssert调用
-        Pattern.compile("BizAssert\\.(notNull|isTrue|notBlank|notEmpty)\\([^,)]+\\s*\\)"),
+        // 忽略无参数或只有参数的BizAssert调用 - 更精确的模式
+        Pattern.compile("BizAssert\\.(notNull|isTrue|notBlank|notEmpty)\\([^,)]+\\s*\\)\\s*;"),
         // 忽略特定的英文业务逻辑消息模式
         Pattern.compile("BizAssert\\.(notNull|isTrue|notBlank|notEmpty)\\([^,]+,\\s*\"(not support more than|Root sector is missing|org not exist|org info must not be null|Invalid currentPath|batchCreateDept request must not be null)[^\"]*\""),
         // 忽略常见的英文参数验证模式
@@ -41,7 +41,7 @@ public class ExceptionScanner {
         Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\\w+ErrorCode\\.\\w+\\.getMessage\\(\\)\\s*\\)"),
         // BizAssert调用有错误码和getMessage()，带格式化
         Pattern.compile("BizAssert\\.(isTrueWithFormat|notNullWithFormat|notBlankWithFormat|notEmptyWithFormat)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\\w+ErrorCode\\.\\w+\\.getMessage\\(\\),[^)]+\\)"),
-        Pattern.compile("ExceptionUtils\\.throwException\\(\\w+ErrorCode\\.\\w+"),
+        Pattern.compile("ExceptionUtils\\.throwException\\(\\w+ErrorCode\\.\\w+\\s*\\)"),
         Pattern.compile("new BizException\\(new ErrorContext\\(\\w+ErrorCode\\.\\w+"),
         Pattern.compile("new \\w+Exception\\([^)]*\\w+ErrorCode\\.\\w+")
     );
@@ -53,6 +53,8 @@ public class ExceptionScanner {
         Pattern.compile("ExceptionUtils\\.throwException\\([^,]+,\\s*\"[^\"]*%[sdf][^\"]*\""),
         // 匹配有错误码但使用中文字符串字面量的情况：BizAssert.notNull(pageNumber, BizErrorCode.PAGE_NUMBER_NULL, "pageNumber必须有值")
         Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\".*[\\u4e00-\\u9fa5]+[^\"]*\""),
+        // 匹配有错误码但使用中文字符串字面量的情况：ExceptionUtils.throwException(OrgErrorCode.AREA_WRONG, "不存在省份数据")
+        Pattern.compile("ExceptionUtils\\.throwException\\([^,]+,\\s*\"[\\u4e00-\\u9fa5]+[^\"]*\"\\s*\\)"),
         // 匹配new BaseDataResponse<>("1", "字符串字面量")模式
         Pattern.compile("new\\s+BaseDataResponse<[^>]*>\\s*\\([^,]+,\\s*\"[^\"]+\"\\s*\\)"),
         // 匹配new BaseResponse<>("1", "字符串字面量")模式  
@@ -66,7 +68,9 @@ public class ExceptionScanner {
         // 匹配跨多行的BizAssert调用中的String.format
         Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]*String\\.format\\("),
         // 匹配跨多行的BizAssert调用中的中文字符串字面量
-        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]*\"[\\u4e00-\\u9fa5]+[^\"]*\"[^)]*\\)")
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]*\"[\\u4e00-\\u9fa5]+[^\"]*\"[^)]*\\)"),
+        // 匹配复杂条件表达式 + 中文字符串字面量的情况：BizAssert.isTrue(load.getSource() != OrgSourceType.DING.getValue(), "当前机构已经是钉钉机构无需操作上钉")
+        Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^)]+,\\s*\"[\\u4e00-\\u9fa5]+[^\"]*\"\\s*\\)")
     );
     
     private List<String> scanFiles = new ArrayList<>();
@@ -249,14 +253,6 @@ public class ExceptionScanner {
             }
         }
         
-        // 检查BizAssert中的不规范用法 - 只有魔法值字符串，没有错误码
-        if (line.contains("BizAssert.") && line.contains("\"") && !line.contains("ErrorCode")) {
-            Pattern magicStringPattern = Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\"[^\"]+\"");
-            if (magicStringPattern.matcher(line).find()) {
-                return true;
-            }
-        }
-        
         // 检查BizAssert中的格式化字符串问题 - 有错误码但使用了格式化字符串却没有用format方法
         if (line.contains("BizAssert.") && line.contains("%") && line.contains("\"")) {
             Pattern formatPattern = Pattern.compile("BizAssert\\.(isTrue|notNull|notBlank|notEmpty)\\([^,]+,\\s*\\w+ErrorCode\\.\\w+,\\s*\"[^\"]*%[sdf][^\"]*\"");
@@ -278,10 +274,21 @@ public class ExceptionScanner {
             }
         }
         
-        // 检查INCORRECT_PATTERNS中的所有模式
-        for (Pattern pattern : INCORRECT_PATTERNS) {
-            if (pattern.matcher(line).find()) {
-                return true;
+        // 检查BizAssert和ExceptionUtils中的不规范用法
+        if ((line.contains("BizAssert.") || line.contains("ExceptionUtils.throwException")) && line.contains("\"")) {
+            // 先检查是否匹配INCORRECT_PATTERNS中的模式
+            for (Pattern pattern : INCORRECT_PATTERNS) {
+                if (pattern.matcher(line).find()) {
+                    return true;
+                }
+            }
+            
+            // 如果没有匹配INCORRECT_PATTERNS，再检查通用的魔法字符串模式（只对没有错误码的情况）
+            if (!line.contains("ErrorCode")) {
+                Pattern magicStringPattern = Pattern.compile("(BizAssert\\.(isTrue|notNull|notBlank|notEmpty)|ExceptionUtils\\.throwException)\\([^,]+,\\s*\"[^\"]+\"");
+                if (magicStringPattern.matcher(line).find()) {
+                    return true;
+                }
             }
         }
         
